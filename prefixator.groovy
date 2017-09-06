@@ -1,18 +1,12 @@
 #!/usr/bin/env groovy
+import java.security.MessageDigest
 
-def job_names = [
-"jenkins-DFG-upgrades-bw-compat-mixed-versions-12-director-stage-upgrade-from-11-rhel-7.4-virt-composable_networker-ipv6-1234",
-"jenkins-DFG-network-neutron-lbaas-12_director-rhel-virthost-3cont_2comp-ipv4-vxlan-ovs-secgroups-with-custom-guest-image-1234",
-"jenkins-DFG-upgrades-upgrade-upgrade-11_director-rhel-virthost-3cont_3db_3msg_2net_2comp_3ceph-ipv6-vxlan-composable-workarounds-on-1234",
-"phase2-9_director-rhel-7.3-virthost-3cont_2comp_3ceph-ipv4-gre-ceph-1234",
-"nightly-10_packstack-rhel-7.4-openstack-all-in-one-neutron-rabbitmq",
-"risk-rdo-pike-CentOS-7-virthost-1cont_1comp_1ceph-ipv4-vxlan-ceph",
-"DFG-ui-python-openstackclient-7-unit-rhos",
-"OSPD-Customized-Deployment-OVB-Cleanup",
-"gate-infrared-tripleo-composable-roles",
-"multijob-phase3-osp-6.0-RHEL-7-network",
-"DFG-network-neutron-dsvm-fullstack-rhos",
-]
+def md5(String s, limit = 4) {
+    MessageDigest digest = MessageDigest.getInstance("MD5")
+    digest.update(s.bytes);
+
+    new BigInteger(1, digest.digest()).toString(16).substring(0, limit)
+ }
 
 def env = System.getenv()
 // nv['GIT_COMMIT'] = "ce9a3c1404e8c91be604088670e93434c4253f03"
@@ -31,16 +25,20 @@ println("INFO: Max prefix size ${MAX_SIZE} ...")
 
 File fh = new File('jobs.txt')
 File output = new File('jobs-after.txt')
+File hostnames = new File('hostnames.txt')
+hostnames.write ""
 output.write ""
 
 fh.each { String j ->
     job_cnt += 1
     // env.BUILD_TAG
     j = j.toLowerCase().replaceAll('_','-')
+    .replaceAll(/\./,'')
     .replaceAll('all-in-one','aio')
     .replaceAll('infrared','ir')
     .replaceAll('composable','cp')
     .replaceAll('two-ports','2p')
+    .replaceAll('single-port','1p')
     .replaceAll('containers','cnt')
     .replaceAll('ctlplane','cpl')
     .replaceAll('packstack','ps')
@@ -50,10 +48,10 @@ fh.each { String j ->
     .replaceAll('virthost','vh')
     .replaceAll('gate','g')
     .replaceAll('risk','r')
-    .replaceAll(/upgrade[s]?/,'u')
+    .replaceAll(/(upgrade|update)[s]?/,'u')
     .replaceAll('phase','p')
     .replaceAll('fullstack','fs')
-    .replaceAll('director','dir')
+    .replaceAll(/(\d+)-director/,'$1d')
     .replaceAll('network','net')
     .replaceAll('neutron','neu')
     .replaceAll('storage','sto')
@@ -75,9 +73,18 @@ fh.each { String j ->
     .replaceAll('workflow','wf')
     .replaceAll('rabbitmq','rmq')
     .replaceAll('monolithic','monolit')
+    .replaceAll('-ipv','')
+    .replaceAll('-external','-ext')
+    .replaceAll('-minimal','-min')
+    .replaceAll('-tempest','-tpst')
+    .replaceAll('-workarounds','-wkr')
 
     def l = j.size()
-    def j2 = j.replaceAll( /(jenkins-|dfg-|-rhos|rhos-|-rhel-\d\.\d)|-7\.\d|-rhel|python-|-ipv[46]|-\d(cont|ceph|db|msg|net|comp)|virt|-(from|with|vxlan|vlan)/, '')
+    // |-7\.\d
+    // vxlan|vlan
+    // -rhel-\d\.\d)
+    def j2 = j.replaceAll( /jenkins-|dfg-|-rhos|rhos-|-rhel|python-|-\d(cont|ceph|db|msg|net|comp)|virt|-(from|with)/, '')
+    .replaceAll('--','-')
     def l2 = j2.size()
 
     total_before += l
@@ -88,6 +95,11 @@ fh.each { String j ->
       println("WARN: ${l} -> ${l2} : ${j2}")
     }
     output << "${j2}\n"
+    Date date = new Date()
+    //String prefix = new Date().format("MMdd-HHmmss-") + "${env.BUILD_TAG ?: new Random().nextInt(10 ** 3)}"
+
+    hostname = date.format('ddHH-') + j2 + '-' + md5(j)
+    hostnames << "${hostname}-controller0\n"
 }
 
-println("INFO: ${total_after*100/total_before} - ${exceeding}/${job_cnt} over the limit")
+println("INFO: ${exceeding}/${job_cnt} over the limit")
